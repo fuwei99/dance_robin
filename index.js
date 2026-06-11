@@ -142,6 +142,111 @@ async function handleProxyRequest(req, res, requestId) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     try {
       bodyBuffer = await readBody(req);
+      
+      // Check if it is a JSON request and target model is deepseek
+      const contentType = req.headers['content-type'] || '';
+      if (contentType.includes('application/json') && bodyBuffer && bodyBuffer.length > 0) {
+        try {
+          const bodyJson = JSON.parse(bodyBuffer.toString('utf8'));
+          if (bodyJson && typeof bodyJson.model === 'string') {
+            const modelNameLower = bodyJson.model.toLowerCase();
+            const isDeepSeek = modelNameLower.includes('deepseek');
+            const isQwen = modelNameLower.includes('qwen');
+            const isMimo = modelNameLower.includes('mimo');
+            const isSeed = modelNameLower.includes('seed-2.0-pro') || modelNameLower.includes('seed-2.0-lite');
+
+            if (isDeepSeek || isQwen || isMimo || isSeed) {
+              // Check shared conditions
+              let hasThinkTag = false;
+              if (Array.isArray(bodyJson.messages)) {
+                hasThinkTag = bodyJson.messages.some(msg => 
+                  msg && typeof msg.content === 'string' && msg.content.includes('<||think:True||>')
+                );
+              }
+
+              const hasReasoningEffort = bodyJson.reasoning_effort && 
+                typeof bodyJson.reasoning_effort === 'string' && 
+                bodyJson.reasoning_effort.toLowerCase() !== 'none';
+
+              // 1. DeepSeek specific logic
+              if (isDeepSeek) {
+                // Add provider configuration
+                bodyJson.provider = {
+                  order: ["deepseek"],
+                  only: ["deepseek"],
+                  ignore: ["moonshot"],
+                  allow_fallbacks: true
+                };
+
+                // Control thinking chain for non-OCR models
+                if (!modelNameLower.includes('deepseek-ocr-2')) {
+                  const hasThinkingUploaded = bodyJson.thinking !== undefined;
+                  if (!hasThinkingUploaded) {
+                    if (hasThinkTag || hasReasoningEffort) {
+                      console.log(`[${requestId}] DeepSeek thinking chain left OPEN (hasThinkTag: ${hasThinkTag}, hasReasoningEffort: ${hasReasoningEffort})`);
+                    } else {
+                      bodyJson.thinking = {
+                        type: "disabled"
+                      };
+                      console.log(`[${requestId}] DeepSeek thinking chain set to DISABLED by default`);
+                    }
+                  } else {
+                    console.log(`[${requestId}] DeepSeek thinking chain using client-provided configuration:`, JSON.stringify(bodyJson.thinking));
+                  }
+                }
+                console.log(`[${requestId}] Added provider configuration for DeepSeek model: ${bodyJson.model}`);
+              }
+
+              // 2. Qwen specific logic
+              if (isQwen) {
+                const hasEnableThinkingUploaded = bodyJson.enable_thinking !== undefined;
+                if (!hasEnableThinkingUploaded) {
+                  if (hasThinkTag || hasReasoningEffort) {
+                    bodyJson.enable_thinking = true;
+                    console.log(`[${requestId}] Qwen thinking chain set to ENABLED (hasThinkTag: ${hasThinkTag}, hasReasoningEffort: ${hasReasoningEffort})`);
+                  } else {
+                    bodyJson.enable_thinking = false;
+                    console.log(`[${requestId}] Qwen thinking chain set to DISABLED by default`);
+                  }
+                } else {
+                  console.log(`[${requestId}] Qwen thinking chain using client-provided configuration: enable_thinking = ${bodyJson.enable_thinking}`);
+                }
+              }
+
+              // 3. Mimo specific logic
+              if (isMimo) {
+                bodyJson.provider = {
+                  order: ["xiaomi", "infini-ai"],
+                  ignore: ["agentuniverse", "alibaba"],
+                  allow_fallbacks: true
+                };
+                console.log(`[${requestId}] Added provider configuration for Mimo model: ${bodyJson.model}`);
+              }
+
+              // 4. Seed specific logic
+              if (isSeed) {
+                const hasThinkingUploaded = bodyJson.thinking !== undefined;
+                if (!hasThinkingUploaded) {
+                  if (hasThinkTag || hasReasoningEffort) {
+                    console.log(`[${requestId}] Seed thinking chain left OPEN (hasThinkTag: ${hasThinkTag}, hasReasoningEffort: ${hasReasoningEffort})`);
+                  } else {
+                    bodyJson.thinking = {
+                      type: "disabled"
+                    };
+                    console.log(`[${requestId}] Seed thinking chain set to DISABLED by default`);
+                  }
+                } else {
+                  console.log(`[${requestId}] Seed thinking chain using client-provided configuration:`, JSON.stringify(bodyJson.thinking));
+                }
+              }
+
+              bodyBuffer = Buffer.from(JSON.stringify(bodyJson), 'utf8');
+            }
+          }
+        } catch (e) {
+          // Ignore JSON parsing errors for malformed bodies
+        }
+      }
     } catch (err) {
       console.error(`[${requestId}] Error reading request body:`, err.message);
       res.statusCode = 400;
@@ -175,6 +280,9 @@ async function handleProxyRequest(req, res, requestId) {
       headers[name] = value;
     }
     headers['authorization'] = `Bearer ${selectedKey}`;
+    if (bodyBuffer) {
+      headers['content-length'] = bodyBuffer.length.toString();
+    }
     
     const targetUrl = `${TARGET_HOST}${req.url}`;
     const dispatcher = getProxyDispatcher(proxyUrl);
