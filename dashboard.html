@@ -868,7 +868,15 @@
         const durationStr = `${log.duration}ms`;
         
         // Tokens format
-        const tokensStr = `${log.prompt_tokens} / ${log.completion_tokens} / ${log.total_tokens}`;
+        let tokensStr = `${log.prompt_tokens}`;
+        if (log.cached_tokens > 0) {
+          tokensStr += ` <span style="font-size:11px;color:#00f2fe;opacity:0.9;">(缓存:${log.cached_tokens})</span>`;
+        }
+        tokensStr += ` / ${log.completion_tokens}`;
+        if (log.reasoning_tokens > 0) {
+          tokensStr += ` <span style="font-size:11px;color:#e100ff;opacity:0.9;">(思维:${log.reasoning_tokens})</span>`;
+        }
+        tokensStr += ` / ${log.total_tokens}`;
         
         // Cost format
         const costStr = log.cost > 0 ? `$${log.cost.toFixed(6)}` : '$0.000000';

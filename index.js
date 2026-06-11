@@ -414,6 +414,8 @@ async function handleProxyRequest(req, res, requestId) {
           let prompt_tokens = 0;
           let completion_tokens = 0;
           let total_tokens = 0;
+          let reasoning_tokens = 0;
+          let cached_tokens = 0;
           
           let provider = response.headers.get('x-provider') || response.headers.get('x-routed-to');
           if (!provider && bodyJson && bodyJson.provider) {
@@ -436,6 +438,12 @@ async function handleProxyRequest(req, res, requestId) {
                 prompt_tokens = resJson.usage.prompt_tokens || 0;
                 completion_tokens = resJson.usage.completion_tokens || 0;
                 total_tokens = resJson.usage.total_tokens || 0;
+                if (resJson.usage.completion_tokens_details) {
+                  reasoning_tokens = resJson.usage.completion_tokens_details.reasoning_tokens || 0;
+                }
+                if (resJson.usage.prompt_tokens_details) {
+                  cached_tokens = resJson.usage.prompt_tokens_details.cached_tokens || 0;
+                }
               }
             } catch (jsonErr) {
               // Fallback: Regex scan for streaming chunks
@@ -452,6 +460,15 @@ async function handleProxyRequest(req, res, requestId) {
                 if (completionMatch) completion_tokens = parseInt(completionMatch[1], 10);
                 if (totalMatch) total_tokens = parseInt(totalMatch[1], 10);
               }
+              // Extract reasoning & cached tokens via regex
+              const reasoningMatch = fullBody.match(/"reasoning_tokens"\s*:\s*(\d+)/);
+              if (reasoningMatch) {
+                reasoning_tokens = parseInt(reasoningMatch[1], 10);
+              }
+              const cachedMatch = fullBody.match(/"cached_tokens"\s*:\s*(\d+)/);
+              if (cachedMatch) {
+                cached_tokens = parseInt(cachedMatch[1], 10);
+              }
             }
           } catch (e) {
             // Buffer concat or text decode failed
@@ -464,6 +481,8 @@ async function handleProxyRequest(req, res, requestId) {
             prompt_tokens,
             completion_tokens,
             total_tokens,
+            reasoning_tokens,
+            cached_tokens,
             ttft,
             duration,
             keyIndex: keyIndex + 1,
@@ -508,6 +527,8 @@ async function handleProxyRequest(req, res, requestId) {
           prompt_tokens: 0,
           completion_tokens: 0,
           total_tokens: 0,
+          reasoning_tokens: 0,
+          cached_tokens: 0,
           ttft: duration,
           duration,
           keyIndex: keyIndex + 1,
