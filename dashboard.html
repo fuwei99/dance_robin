@@ -406,6 +406,43 @@
       color: var(--text-muted);
       font-style: italic;
     }
+
+    .log-table th {
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .log-table td {
+      padding: 12px 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      vertical-align: middle;
+    }
+    
+    .log-table tbody tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    
+    .log-tag {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      display: inline-block;
+    }
+    
+    .log-tag-model {
+      background: rgba(127, 0, 255, 0.15);
+      color: #e100ff;
+      border: 1px solid rgba(127, 0, 255, 0.3);
+    }
+    
+    .log-tag-provider {
+      background: rgba(0, 242, 254, 0.15);
+      color: var(--primary);
+      border: 1px solid rgba(0, 242, 254, 0.3);
+    }
   </style>
 </head>
 <body>
@@ -497,6 +534,38 @@
         </div>
       </div>
     </div>
+
+    <!-- Log Section (Usage Records) -->
+    <div class="card glass" style="margin-top: 30px;">
+      <div class="card-title">
+        <span>调用使用记录 (Recent Request Logs)</span>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-secondary" style="padding: 6px 12px; font-size:13px;" onclick="fetchLogs()">刷新日志</button>
+          <button class="btn btn-danger" style="padding: 6px 12px; font-size:13px;" onclick="clearLogs()">清除记录</button>
+        </div>
+      </div>
+      
+      <div style="overflow-x: auto;">
+        <table class="log-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 14px;">
+          <thead>
+            <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-muted); font-weight: 600;">
+              <th style="padding: 12px 8px;">时间</th>
+              <th style="padding: 12px 8px;">模型</th>
+              <th style="padding: 12px 8px;">通道 (Provider)</th>
+              <th style="padding: 12px 8px;">使用密钥</th>
+              <th style="padding: 12px 8px; text-align: right;">首字 / 总时</th>
+              <th style="padding: 12px 8px; text-align: right;">Token 消耗 (输入/输出/总)</th>
+              <th style="padding: 12px 8px; text-align: right;">预估花费</th>
+            </tr>
+          </thead>
+          <tbody id="logTableBody">
+            <tr>
+              <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted); font-style: italic;">暂无调用记录</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- Toast Element -->
@@ -516,6 +585,9 @@
     // Initialize Page
     window.addEventListener('DOMContentLoaded', () => {
       fetchConfig();
+      fetchLogs();
+      // Auto refresh logs every 5000ms
+      setInterval(fetchLogs, 5000);
     });
 
     function showToast(message, type = 'success') {
@@ -755,6 +827,76 @@
         }
       } catch (err) {
         showToast('保存设置失败', 'error');
+      }
+    }
+
+    async function fetchLogs() {
+      try {
+        const response = await makeRequest('/api/logs');
+        const logs = await response.json();
+        renderLogs(logs);
+      } catch (err) {
+        console.error('Failed to load logs:', err);
+      }
+    }
+
+    function renderLogs(logs) {
+      const tbody = document.getElementById('logTableBody');
+      if (!tbody) return;
+      
+      if (!logs || logs.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted); font-style: italic;">暂无调用记录</td>
+          </tr>
+        `;
+        return;
+      }
+      
+      tbody.innerHTML = '';
+      logs.forEach(log => {
+        const tr = document.createElement('tr');
+        
+        // Format timestamp
+        const timeStr = new Date(log.timestamp).toLocaleTimeString();
+        
+        // Key display
+        const keyDisplay = `Key [${log.keyIndex}] ${log.maskedKey}`;
+        
+        // TTFT / Total Duration format
+        const ttftStr = log.ttft ? `${log.ttft}ms` : '-';
+        const durationStr = `${log.duration}ms`;
+        
+        // Tokens format
+        const tokensStr = `${log.prompt_tokens} / ${log.completion_tokens} / ${log.total_tokens}`;
+        
+        // Cost format
+        const costStr = log.cost > 0 ? `$${log.cost.toFixed(6)}` : '$0.000000';
+        
+        tr.innerHTML = `
+          <td style="padding: 12px 8px; color: var(--text-muted);">${timeStr}</td>
+          <td style="padding: 12px 8px;"><span class="log-tag log-tag-model">${escapeHtml(log.model)}</span></td>
+          <td style="padding: 12px 8px;"><span class="log-tag log-tag-provider">${escapeHtml(log.provider)}</span></td>
+          <td style="padding: 12px 8px; font-family: monospace; font-size: 13px; color: var(--text-muted);">${escapeHtml(keyDisplay)}</td>
+          <td style="padding: 12px 8px; text-align: right; color: var(--text-muted);">${ttftStr} / ${durationStr}</td>
+          <td style="padding: 12px 8px; text-align: right; font-family: monospace;">${tokensStr}</td>
+          <td style="padding: 12px 8px; text-align: right; font-family: monospace; color: var(--warning); font-weight: 500;">${costStr}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function clearLogs() {
+      if (!confirm('确认要清除所有调用记录吗？')) return;
+      try {
+        const response = await makeRequest('/api/logs/clear', { method: 'POST' });
+        const result = await response.json();
+        if (result.success) {
+          showToast('调用记录已清空');
+          fetchLogs();
+        }
+      } catch (err) {
+        showToast('清空记录失败', 'error');
       }
     }
   </script>

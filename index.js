@@ -51,6 +51,54 @@ function maskKey(key) {
   return `${key.slice(0, 6)}...${key.slice(-5)}`;
 }
 
+// Request logs memory store (capped at 200 items)
+const requestLogs = [];
+const MAX_LOGS = 200;
+
+function estimateCost(model, promptTokens, completionTokens) {
+  const modelLower = model.toLowerCase();
+  let inputRate = 0.15; // per 1M tokens (USD)
+  let outputRate = 0.45; // per 1M tokens (USD)
+  
+  if (modelLower.includes('deepseek')) {
+    if (modelLower.includes('reasoner') || modelLower.includes('r1')) {
+      inputRate = 0.55;
+      outputRate = 2.19;
+    } else {
+      inputRate = 0.14;
+      outputRate = 0.28;
+    }
+  } else if (modelLower.includes('qwen')) {
+    if (modelLower.includes('max') || modelLower.includes('turbo')) {
+      inputRate = 0.30;
+      outputRate = 0.90;
+    } else {
+      inputRate = 0.10;
+      outputRate = 0.30;
+    }
+  } else if (modelLower.includes('mimo')) {
+    inputRate = 0.10;
+    outputRate = 0.30;
+  } else if (modelLower.includes('seed')) {
+    inputRate = 0.15;
+    outputRate = 0.45;
+  } else if (modelLower.includes('kimi')) {
+    inputRate = 0.15;
+    outputRate = 0.45;
+  }
+  
+  const cost = (promptTokens * inputRate + completionTokens * outputRate) / 1000000;
+  return parseFloat(cost.toFixed(6));
+}
+
+function addRequestLog(log) {
+  log.cost = estimateCost(log.model, log.prompt_tokens, log.completion_tokens);
+  requestLogs.unshift(log);
+  if (requestLogs.length > MAX_LOGS) {
+    requestLogs.pop();
+  }
+}
+
 /**
  * Persists current in-memory configurations back to the .env file.
  */
@@ -139,6 +187,7 @@ async function handleProxyRequest(req, res, requestId) {
 
   // 2. Buffer request body to support retries on failures (e.g. 429/402/401)
   let bodyBuffer = null;
+  let bodyJson = null;
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     try {
       bodyBuffer = await readBody(req);
@@ -147,7 +196,7 @@ async function handleProxyRequest(req, res, requestId) {
       const contentType = req.headers['content-type'] || '';
       if (contentType.includes('application/json') && bodyBuffer && bodyBuffer.length > 0) {
         try {
-          const bodyJson = JSON.parse(bodyBuffer.toString('utf8'));
+          bodyJson = JSON.parse(bodyBuffer.toString('utf8'));
           if (bodyJson && typeof bodyJson.model === 'string') {
             const modelNameLower = bodyJson.model.toLowerCase();
             const isDeepSeek = modelNameLower.includes('deepseek');
@@ -217,7 +266,7 @@ async function handleProxyRequest(req, res, requestId) {
               // 3. Mimo specific logic
               if (isMimo) {
                 bodyJson.provider = {
-                  order: ["infini-ai", "xiaomi"],
+                  order: ["xiaomi", "infini-ai"],
                   ignore: ["agentuniverse", "alibaba"],
                   allow_fallbacks: true
                 };
@@ -340,14 +389,87 @@ async function handleProxyRequest(req, res, requestId) {
         res.setHeader(name, value);
       }
       
-      // Stream response body
+      // Stream response body and log metrics
       if (response.body) {
+        let firstChunkTime = null;
+        const chunks = [];
         const responseStream = Readable.fromWeb(response.body);
-        responseStream.pipe(res);
+        
+        responseStream.on('data', (chunk) => {
+          if (!firstChunkTime) {
+            firstChunkTime = Date.now();
+          }
+          chunks.push(chunk);
+          res.write(chunk);
+        });
         
         responseStream.on('end', () => {
           const duration = Date.now() - start;
+          const ttft = firstChunkTime ? (firstChunkTime - start) : duration;
           console.log(`[${requestId}] Response completed | Status ${response.status} (${duration}ms)`);
+          
+          res.end();
+
+          // Try parsing usage details from response body
+          let prompt_tokens = 0;
+          let completion_tokens = 0;
+          let total_tokens = 0;
+          
+          let provider = response.headers.get('x-provider') || response.headers.get('x-routed-to');
+          if (!provider && bodyJson && bodyJson.provider) {
+            if (Array.isArray(bodyJson.provider.only) && bodyJson.provider.only.length > 0) {
+              provider = bodyJson.provider.only.join(', ');
+            } else if (Array.isArray(bodyJson.provider.order) && bodyJson.provider.order.length > 0) {
+              provider = bodyJson.provider.order.join(', ') + ' (首选)';
+            }
+          }
+          if (!provider) {
+            provider = 'default';
+          }
+          
+          try {
+            const fullBody = Buffer.concat(chunks).toString('utf8');
+            try {
+              // Try parsing single JSON response (for non-streaming)
+              const resJson = JSON.parse(fullBody);
+              if (resJson && resJson.usage) {
+                prompt_tokens = resJson.usage.prompt_tokens || 0;
+                completion_tokens = resJson.usage.completion_tokens || 0;
+                total_tokens = resJson.usage.total_tokens || 0;
+              }
+            } catch (jsonErr) {
+              // Fallback: Regex scan for streaming chunks
+              const usageMatch = fullBody.match(/"usage"\s*:\s*\{\s*"prompt_tokens"\s*:\s*(\d+)\s*,\s*"completion_tokens"\s*:\s*(\d+)\s*,\s*"total_tokens"\s*:\s*(\d+)/);
+              if (usageMatch) {
+                prompt_tokens = parseInt(usageMatch[1], 10);
+                completion_tokens = parseInt(usageMatch[2], 10);
+                total_tokens = parseInt(usageMatch[3], 10);
+              } else {
+                const promptMatch = fullBody.match(/"prompt_tokens"\s*:\s*(\d+)/);
+                const completionMatch = fullBody.match(/"completion_tokens"\s*:\s*(\d+)/);
+                const totalMatch = fullBody.match(/"total_tokens"\s*:\s*(\d+)/);
+                if (promptMatch) prompt_tokens = parseInt(promptMatch[1], 10);
+                if (completionMatch) completion_tokens = parseInt(completionMatch[1], 10);
+                if (totalMatch) total_tokens = parseInt(totalMatch[1], 10);
+              }
+            }
+          } catch (e) {
+            // Buffer concat or text decode failed
+          }
+
+          // Add request log
+          addRequestLog({
+            timestamp: new Date().toISOString(),
+            model: (bodyJson && bodyJson.model) || 'unknown',
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+            ttft,
+            duration,
+            keyIndex: keyIndex + 1,
+            maskedKey,
+            provider
+          });
         });
         
         responseStream.on('error', (err) => {
@@ -366,6 +488,32 @@ async function handleProxyRequest(req, res, requestId) {
         res.end();
         const duration = Date.now() - start;
         console.log(`[${requestId}] Response completed (no body) | Status ${response.status} (${duration}ms)`);
+        
+        let provider = response.headers.get('x-provider') || response.headers.get('x-routed-to');
+        if (!provider && bodyJson && bodyJson.provider) {
+          if (Array.isArray(bodyJson.provider.only) && bodyJson.provider.only.length > 0) {
+            provider = bodyJson.provider.only.join(', ');
+          } else if (Array.isArray(bodyJson.provider.order) && bodyJson.provider.order.length > 0) {
+            provider = bodyJson.provider.order.join(', ') + ' (首选)';
+          }
+        }
+        if (!provider) {
+          provider = 'default';
+        }
+
+        // Add empty log
+        addRequestLog({
+          timestamp: new Date().toISOString(),
+          model: (bodyJson && bodyJson.model) || 'unknown',
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          ttft: duration,
+          duration,
+          keyIndex: keyIndex + 1,
+          maskedKey,
+          provider
+        });
       }
       
       return; // Handled successfully, break out of handler
@@ -439,6 +587,31 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: err.message }));
     }
+    return;
+  }
+
+  // Control Panel API: Get Logs
+  if (pathname === '/api/logs' && req.method === 'GET') {
+    if (!isAuthorized()) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(requestLogs));
+    return;
+  }
+
+  // Control Panel API: Clear Logs
+  if (pathname === '/api/logs/clear' && req.method === 'POST') {
+    if (!isAuthorized()) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+    requestLogs.length = 0;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true }));
     return;
   }
   
