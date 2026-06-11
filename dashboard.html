@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tokendance API 代理控制面板</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #080c14;
+      --bg-card: rgba(15, 23, 42, 0.65);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #00f2fe;
+      --secondary: #7f00ff;
+      --gradient-primary: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      --gradient-accent: linear-gradient(135deg, #7f00ff 0%, #e100ff 100%);
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(0, 242, 254, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(127, 0, 255, 0.05) 0%, transparent 40%);
+    }
+
+    /* Glassmorphism utility */
+    .glass {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    /* Container & Layout */
+    .app-container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--gradient-primary);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: #000;
+      font-size: 20px;
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.4);
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      background: linear-gradient(to right, #fff, var(--text-muted));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .badge {
+      padding: 6px 12px;
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-primary {
+      background: rgba(0, 242, 254, 0.1);
+      border: 1px solid rgba(0, 242, 254, 0.2);
+      color: var(--primary);
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--success);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    /* Main Grid */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 30px;
+    }
+
+    @media (max-width: 900px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card {
+      padding: 24px;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Form Elements */
+    .form-group {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    label {
+      font-size: 14px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    input, select {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border-color);
+      padding: 12px 16px;
+      border-radius: 8px;
+      color: var(--text-main);
+      font-size: 15px;
+      outline: none;
+      transition: all 0.3s ease;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.15);
+    }
+
+    .btn {
+      padding: 12px 20px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+      background: var(--gradient-primary);
+      color: #080c14;
+      box-shadow: 0 4px 15px rgba(0, 242, 254, 0.2);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: var(--danger);
+    }
+
+    .btn-danger:hover {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    /* Key Management list */
+    .key-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 480px;
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+
+    .key-list::-webkit-scrollbar {
+      width: 6px;
+    }
+    .key-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .key-list::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 4px;
+    }
+
+    .key-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      transition: all 0.3s ease;
+    }
+
+    .key-item.active {
+      border-color: rgba(0, 242, 254, 0.4);
+      background: rgba(0, 242, 254, 0.03);
+    }
+
+    .key-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-grow: 1;
+    }
+
+    .key-index {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .key-item.active .key-index {
+      background: var(--gradient-primary);
+      color: #080c14;
+    }
+
+    .key-string {
+      font-family: monospace;
+      font-size: 14px;
+      word-break: break-all;
+    }
+
+    .key-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Segmented Control / Toggle Switches */
+    .mode-selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+
+    .mode-option {
+      padding: 10px;
+      text-align: center;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      user-select: none;
+    }
+
+    .mode-option.active {
+      background: var(--gradient-primary);
+      color: #080c14;
+      font-weight: 600;
+    }
+
+    /* Login Modal/View */
+    .login-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: var(--bg-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      background-image: 
+        radial-gradient(circle at center, rgba(127, 0, 255, 0.1) 0%, transparent 60%);
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 400px;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      text-align: center;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 16px 24px;
+      border-radius: 8px;
+      color: #fff;
+      font-weight: 500;
+      font-size: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast-success {
+      background: var(--success);
+    }
+
+    .toast-error {
+      background: var(--danger);
+    }
+
+    .no-keys {
+      padding: 40px;
+      text-align: center;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Login Overlay -->
+  <div id="loginOverlay" class="login-container" style="display: none;">
+    <div class="login-card glass">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+        <div class="logo-icon">T</div>
+        <h2>控制面板登录</h2>
+        <p style="font-size: 14px; color: var(--text-muted);">请输入本地代理鉴权密码访问面板</p>
+      </div>
+      <div class="form-group" style="text-align: left;">
+        <label for="loginPassword">访问密码</label>
+        <input type="password" id="loginPassword" placeholder="输入 PASSWORD">
+      </div>
+      <button class="btn btn-primary" onclick="login()">登录</button>
+      <div id="loginError" style="color: var(--danger); font-size: 14px; display: none;">密码错误，请重试</div>
+    </div>
+  </div>
+
+  <!-- Main App Content -->
+  <div class="app-container" id="appContent">
+    <header>
+      <div class="logo-container">
+        <div class="logo-icon">T</div>
+        <div>
+          <h1>Tokendance API 控制面板</h1>
+          <p style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">实时 Key 轮询与故障隔离代理</p>
+        </div>
+      </div>
+      <div class="badge badge-primary">
+        <span class="pulse-dot"></span>
+        代理服务运行中
+      </div>
+    </header>
+
+    <div class="dashboard-grid">
+      <!-- Left: Key Management -->
+      <div class="card glass">
+        <div class="card-title">
+          <span>密钥管理 (KEY)</span>
+          <span id="keyCountBadge" class="badge" style="background: rgba(255,255,255,0.05); color: var(--text-main);">0 个密钥</span>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+          <input type="text" id="newKeyInput" placeholder="输入新的 API Key (例如 sk-...)" style="flex-grow: 1;">
+          <button class="btn btn-primary" onclick="addKey()">添加密钥</button>
+        </div>
+
+        <div class="key-list" id="keyListContainer">
+          <div class="no-keys">暂无配置密钥</div>
+        </div>
+      </div>
+
+      <!-- Right: Configurations -->
+      <div style="display: flex; flex-direction: column; gap: 30px;">
+        <!-- Rotation settings -->
+        <div class="card glass">
+          <h3 class="card-title">分流轮询设置</h3>
+          
+          <div class="form-group">
+            <label>运行模式</label>
+            <div class="mode-selector">
+              <div class="mode-option" id="modeExhaustion" onclick="setMode('exhaustion')">故障再更换</div>
+              <div class="mode-option" id="modeRoundRobin" onclick="setMode('round-robin')">轮询分流</div>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;" id="modeDesc">
+              故障再更换：保持使用当前选中 Key，直到发生 429 / 402 / 401 才会轮换并自动重试。
+            </p>
+          </div>
+
+          <div class="form-group">
+            <label for="outboundProxy">出口代理 (Proxy)</label>
+            <input type="text" id="outboundProxy" placeholder="例如 http://127.0.0.1:7890 (可选)">
+          </div>
+
+          <button class="btn btn-primary" style="width: 100%;" onclick="saveSystemConfig()">保存系统设置</button>
+        </div>
+
+        <!-- Auth settings -->
+        <div class="card glass">
+          <h3 class="card-title">鉴权安全设置</h3>
+          <div class="form-group">
+            <label for="adminPassword">控制面板 & 客户端密码</label>
+            <input type="password" id="adminPassword" placeholder="输入新密码 (留空则不开启验证)">
+          </div>
+          <button class="btn btn-secondary" style="width: 100%;" onclick="savePassword()">更新密码</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Element -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let config = {
+      keys: [],
+      currentIndex: 0,
+      mode: 'round-robin',
+      proxyUrl: '',
+      hasPassword: false
+    };
+
+    let authToken = localStorage.getItem('proxy_auth_token') || '';
+
+    // Initialize Page
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchConfig();
+    });
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      toast.className = `toast toast-${type} show`;
+      toast.innerText = message;
+      setTimeout(() => {
+        toast.className = 'toast';
+      }, 3000);
+    }
+
+    async function makeRequest(url, options = {}) {
+      if (!options.headers) options.headers = {};
+      if (authToken) {
+        options.headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      
+      const response = await fetch(url, options);
+      if (response.status === 401) {
+        // Auth failed, show login overlay
+        document.getElementById('loginOverlay').style.display = 'flex';
+        document.getElementById('appContent').style.opacity = '0.3';
+        throw new Error('Unauthorized');
+      }
+      return response;
+    }
+
+    async function login() {
+      const password = document.getElementById('loginPassword').value;
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+        if (data.success) {
+          authToken = password;
+          localStorage.setItem('proxy_auth_token', password);
+          document.getElementById('loginOverlay').style.display = 'none';
+          document.getElementById('appContent').style.opacity = '1';
+          document.getElementById('loginError').style.display = 'none';
+          fetchConfig();
+          showToast('登录成功');
+        } else {
+          document.getElementById('loginError').style.display = 'block';
+        }
+      } catch (err) {
+        showToast('登录出错', 'error');
+      }
+    }
+
+    async function fetchConfig() {
+      try {
+        const response = await makeRequest('/api/config');
+        config = await response.json();
+        
+        // Populate inputs
+        document.getElementById('outboundProxy').value = config.proxyUrl || '';
+        document.getElementById('adminPassword').value = config.hasPassword ? '********' : ''; // Placeholder if exists
+        
+        // Mode UI
+        setModeUI(config.mode);
+        
+        // Render Keys
+        renderKeysList();
+      } catch (err) {
+        console.error('Failed to load config:', err);
+      }
+    }
+
+    function setModeUI(mode) {
+      config.mode = mode;
+      const roundRobinOpt = document.getElementById('modeRoundRobin');
+      const exhaustionOpt = document.getElementById('modeExhaustion');
+      const desc = document.getElementById('modeDesc');
+
+      if (mode === 'round-robin') {
+        roundRobinOpt.classList.add('active');
+        exhaustionOpt.classList.remove('active');
+        desc.innerText = '轮询分流：每次客户端请求，都自动顺延使用下一个 Key (分摊配额负载)。';
+      } else {
+        exhaustionOpt.classList.add('active');
+        roundRobinOpt.classList.remove('active');
+        desc.innerText = '故障再更换：保持使用当前选中 Key，直到发生 429/402/401 失败才轮换至下一个 Key 并自动重试。';
+      }
+    }
+
+    function setMode(mode) {
+      setModeUI(mode);
+    }
+
+    function renderKeysList() {
+      const container = document.getElementById('keyListContainer');
+      const countBadge = document.getElementById('keyCountBadge');
+      
+      countBadge.innerText = `${config.keys.length} 个密钥`;
+      
+      if (config.keys.length === 0) {
+        container.innerHTML = '<div class="no-keys">暂无配置密钥</div>';
+        return;
+      }
+
+      container.innerHTML = '';
+      config.keys.forEach((key, index) => {
+        const isActive = index === config.currentIndex;
+        const keyItem = document.createElement('div');
+        keyItem.className = `key-item ${isActive ? 'active' : ''}`;
+        
+        keyItem.innerHTML = `
+          <div class="key-info">
+            <div class="key-index">${index + 1}</div>
+            <div class="key-string">${escapeHtml(key)}</div>
+          </div>
+          <div class="key-actions">
+            ${isActive 
+              ? `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--success); font-weight:600;"><span class="pulse-dot"></span>使用中</span>`
+              : `<button class="btn btn-secondary" style="padding: 6px 12px; font-size:12px;" onclick="setActiveKey(${index})">设为使用</button>`
+            }
+            <button class="btn btn-danger" style="padding: 6px 12px; font-size:12px;" onclick="deleteKey(${index})">删除</button>
+          </div>
+        `;
+        container.appendChild(keyItem);
+      });
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    async function setActiveKey(index) {
+      try {
+        const res = await makeRequest('/api/switch-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ index })
+        });
+        const result = await res.json();
+        if (result.success) {
+          config.currentIndex = index;
+          renderKeysList();
+          showToast(`已成功切换到第 ${index + 1} 个 Key`);
+        }
+      } catch (err) {
+        showToast('切换 Key 失败', 'error');
+      }
+    }
+
+    async function addKey() {
+      const input = document.getElementById('newKeyInput');
+      const newKey = input.value.trim();
+      if (!newKey) {
+        showToast('请输入有效的 Key', 'error');
+        return;
+      }
+      
+      // Add key locally
+      config.keys.push(newKey);
+      input.value = '';
+      
+      // Save changes
+      await saveConfigToServer();
+    }
+
+    async function deleteKey(index) {
+      if (confirm(`确认要删除第 ${index + 1} 个 Key 吗？`)) {
+        config.keys.splice(index, 1);
+        // Adjust currentIndex if necessary
+        if (config.currentIndex >= config.keys.length) {
+          config.currentIndex = Math.max(0, config.keys.length - 1);
+        }
+        await saveConfigToServer();
+      }
+    }
+
+    async function saveSystemConfig() {
+      config.proxyUrl = document.getElementById('outboundProxy').value.trim();
+      await saveConfigToServer();
+    }
+
+    async function savePassword() {
+      const passwordInput = document.getElementById('adminPassword').value.trim();
+      if (passwordInput === '********') {
+        showToast('未检测到密码修改');
+        return;
+      }
+      
+      try {
+        const response = await makeRequest('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            keys: config.keys,
+            mode: config.mode,
+            proxyUrl: config.proxyUrl,
+            password: passwordInput // Update password
+          })
+        });
+        const result = await response.json();
+        if (result.success) {
+          showToast('密码已更新');
+          if (passwordInput === '') {
+            authToken = '';
+            localStorage.removeItem('proxy_auth_token');
+          } else {
+            authToken = passwordInput;
+            localStorage.setItem('proxy_auth_token', passwordInput);
+          }
+          fetchConfig();
+        }
+      } catch (err) {
+        showToast('保存设置失败', 'error');
+      }
+    }
+
+    async function saveConfigToServer() {
+      try {
+        const response = await makeRequest('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            keys: config.keys,
+            mode: config.mode,
+            proxyUrl: config.proxyUrl
+            // Password not changed here
+          })
+        });
+        const result = await response.json();
+        if (result.success) {
+          showToast('设置保存成功');
+          fetchConfig();
+        }
+      } catch (err) {
+        showToast('保存设置失败', 'error');
+      }
+    }
+  </script>
+</body>
+</html>
