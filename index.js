@@ -219,6 +219,11 @@ async function handleProxyRequest(req, res, requestId) {
                 typeof bodyJson.reasoning_effort === 'string' && 
                 bodyJson.reasoning_effort.toLowerCase() !== 'none';
 
+              // Strip reasoning_effort to prevent upstream 400 errors since these models do not support it
+              if (bodyJson.reasoning_effort !== undefined) {
+                delete bodyJson.reasoning_effort;
+              }
+
               // 1. DeepSeek specific logic
               if (isDeepSeek) {
                 // Add provider configuration
@@ -234,7 +239,10 @@ async function handleProxyRequest(req, res, requestId) {
                   const hasThinkingUploaded = bodyJson.thinking !== undefined;
                   if (!hasThinkingUploaded) {
                     if (hasThinkTag || hasReasoningEffort) {
-                      console.log(`[${requestId}] DeepSeek thinking chain left OPEN (hasThinkTag: ${hasThinkTag}, hasReasoningEffort: ${hasReasoningEffort})`);
+                      bodyJson.thinking = {
+                        type: "enabled"
+                      };
+                      console.log(`[${requestId}] DeepSeek thinking chain set to ENABLED (hasThinkTag: ${hasThinkTag}, hasReasoningEffort: ${hasReasoningEffort})`);
                     } else {
                       bodyJson.thinking = {
                         type: "disabled"
@@ -279,7 +287,10 @@ async function handleProxyRequest(req, res, requestId) {
                 const hasThinkingUploaded = bodyJson.thinking !== undefined;
                 if (!hasThinkingUploaded) {
                   if (hasThinkTag || hasReasoningEffort) {
-                    console.log(`[${requestId}] ${bodyJson.model} thinking chain left OPEN (hasThinkTag: ${hasThinkTag}, hasReasoningEffort: ${hasReasoningEffort})`);
+                    bodyJson.thinking = {
+                      type: "enabled"
+                    };
+                    console.log(`[${requestId}] ${bodyJson.model} thinking chain set to ENABLED (hasThinkTag: ${hasThinkTag}, hasReasoningEffort: ${hasReasoningEffort})`);
                   } else {
                     bodyJson.thinking = {
                       type: "disabled"
