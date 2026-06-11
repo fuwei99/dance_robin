@@ -204,8 +204,9 @@ async function handleProxyRequest(req, res, requestId) {
             const isMimo = modelNameLower.includes('mimo');
             const isSeed = modelNameLower.includes('seed-2.0-pro') || modelNameLower.includes('seed-2.0-lite');
             const isKimi = modelNameLower.includes('kimi-k2.5') || modelNameLower.includes('kimi-k2.6');
+            const isGlm = modelNameLower.includes('glm-5v-turbo') || modelNameLower.includes('glm-5.1');
 
-            if (isDeepSeek || isQwen || isMimo || isSeed || isKimi) {
+            if (isDeepSeek || isQwen || isMimo || isSeed || isKimi || isGlm) {
               // Check shared conditions
               let hasThinkTag = false;
               if (Array.isArray(bodyJson.messages)) {
@@ -273,8 +274,8 @@ async function handleProxyRequest(req, res, requestId) {
                 console.log(`[${requestId}] Added provider configuration for Mimo model: ${bodyJson.model}`);
               }
 
-              // 4. Seed, Kimi and Mimo specific thinking chain logic
-              if (isSeed || isKimi || isMimo) {
+              // 4. Seed, Kimi, Mimo and GLM specific thinking chain logic
+              if (isSeed || isKimi || isMimo || isGlm) {
                 const hasThinkingUploaded = bodyJson.thinking !== undefined;
                 if (!hasThinkingUploaded) {
                   if (hasThinkTag || hasReasoningEffort) {
