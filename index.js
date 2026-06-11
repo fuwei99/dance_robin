@@ -217,7 +217,7 @@ async function handleProxyRequest(req, res, requestId) {
               // 3. Mimo specific logic
               if (isMimo) {
                 bodyJson.provider = {
-                  order: ["xiaomi", "infini-ai"],
+                  order: ["infini-ai", "xiaomi"],
                   ignore: ["agentuniverse", "alibaba"],
                   allow_fallbacks: true
                 };
