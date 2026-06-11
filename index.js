@@ -154,8 +154,9 @@ async function handleProxyRequest(req, res, requestId) {
             const isQwen = modelNameLower.includes('qwen');
             const isMimo = modelNameLower.includes('mimo');
             const isSeed = modelNameLower.includes('seed-2.0-pro') || modelNameLower.includes('seed-2.0-lite');
+            const isKimi = modelNameLower.includes('kimi-k2.5') || modelNameLower.includes('kimi-k2.6');
 
-            if (isDeepSeek || isQwen || isMimo || isSeed) {
+            if (isDeepSeek || isQwen || isMimo || isSeed || isKimi) {
               // Check shared conditions
               let hasThinkTag = false;
               if (Array.isArray(bodyJson.messages)) {
@@ -223,20 +224,20 @@ async function handleProxyRequest(req, res, requestId) {
                 console.log(`[${requestId}] Added provider configuration for Mimo model: ${bodyJson.model}`);
               }
 
-              // 4. Seed specific logic
-              if (isSeed) {
+              // 4. Seed, Kimi and Mimo specific thinking chain logic
+              if (isSeed || isKimi || isMimo) {
                 const hasThinkingUploaded = bodyJson.thinking !== undefined;
                 if (!hasThinkingUploaded) {
                   if (hasThinkTag || hasReasoningEffort) {
-                    console.log(`[${requestId}] Seed thinking chain left OPEN (hasThinkTag: ${hasThinkTag}, hasReasoningEffort: ${hasReasoningEffort})`);
+                    console.log(`[${requestId}] ${bodyJson.model} thinking chain left OPEN (hasThinkTag: ${hasThinkTag}, hasReasoningEffort: ${hasReasoningEffort})`);
                   } else {
                     bodyJson.thinking = {
                       type: "disabled"
                     };
-                    console.log(`[${requestId}] Seed thinking chain set to DISABLED by default`);
+                    console.log(`[${requestId}] ${bodyJson.model} thinking chain set to DISABLED by default`);
                   }
                 } else {
-                  console.log(`[${requestId}] Seed thinking chain using client-provided configuration:`, JSON.stringify(bodyJson.thinking));
+                  console.log(`[${requestId}] ${bodyJson.model} thinking chain using client-provided configuration:`, JSON.stringify(bodyJson.thinking));
                 }
               }
 
