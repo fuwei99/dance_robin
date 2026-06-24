@@ -742,7 +742,49 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 6. Otherwise, perform proxy routing
+  // 6. Control Panel API: Query all key balances
+  if (pathname === '/api/balances' && req.method === 'POST') {
+    if (!isAuthorized()) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+    try {
+      if (keys.length === 0) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, balances: [] }));
+        return;
+      }
+
+      const dispatcher = getProxyDispatcher(proxyUrl);
+      const fetchOptions = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ keys }),
+        duplex: 'half'
+      };
+      if (dispatcher) {
+        fetchOptions.dispatcher = dispatcher;
+      }
+
+      const response = await fetch('https://tokendance.guoziyu.indevs.in/api/balance', fetchOptions);
+      if (!response.ok) {
+        throw new Error(`Upstream returned status ${response.status}`);
+      }
+
+      const data = await response.json();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, balances: data }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
+    return;
+  }
+
+  // 7. Otherwise, perform proxy routing
   await handleProxyRequest(req, res, requestId);
 });
 

@@ -485,7 +485,10 @@
       <div class="card glass">
         <div class="card-title">
           <span>密钥管理 (KEY)</span>
-          <span id="keyCountBadge" class="badge" style="background: rgba(255,255,255,0.05); color: var(--text-main);">0 个密钥</span>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn btn-secondary" id="refreshBalancesBtn" style="padding: 6px 12px; font-size:13px;" onclick="queryAllBalances()">一键刷新额度</button>
+            <span id="keyCountBadge" class="badge" style="background: rgba(255,255,255,0.05); color: var(--text-main);">0 个密钥</span>
+          </div>
         </div>
 
         <div style="display: flex; gap: 12px; margin-bottom: 24px;">
@@ -580,6 +583,8 @@
       hasPassword: false
     };
 
+    let keyBalances = {};
+
     let authToken = localStorage.getItem('proxy_auth_token') || '';
 
     // Initialize Page
@@ -654,6 +659,9 @@
         
         // Render Keys
         renderKeysList();
+
+        // Auto-query balances
+        queryAllBalances();
       } catch (err) {
         console.error('Failed to load config:', err);
       }
@@ -680,6 +688,59 @@
       setModeUI(mode);
     }
 
+    function renderKeyBalance(key) {
+      const balInfo = keyBalances[key];
+      if (!balInfo) return '';
+      
+      if (!balInfo.success) {
+        return `<span style="color: var(--danger);">查询失败: ${balInfo.error || balInfo.message || '网络错误'}</span>`;
+      }
+      
+      const bal = balInfo.data && balInfo.data.balance;
+      if (!bal) {
+        return `<span style="color: var(--danger);">数据格式错误</span>`;
+      }
+      
+      const balanceVal = (bal.balance / 1000000).toFixed(4);
+      const totalVal = (bal.credits / 1000000).toFixed(4);
+      const usedVal = (bal.credits_used / 1000000).toFixed(4);
+      
+      return `<span style="color: var(--primary); font-weight: 500;">余额: ${balanceVal} 元</span> 
+              <span style="margin-left: 10px; opacity: 0.7; font-size: 12px;">(总额: ${totalVal} 元 | 已用: ${usedVal} 元)</span>`;
+    }
+
+    async function queryAllBalances() {
+      const btn = document.getElementById('refreshBalancesBtn');
+      if (!btn) return;
+      const originalText = btn.innerText;
+      btn.disabled = true;
+      btn.innerText = '查询中...';
+      
+      try {
+        const res = await makeRequest('/api/balances', {
+          method: 'POST'
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.balances)) {
+          data.balances.forEach((item, index) => {
+            const keyStr = config.keys[index];
+            if (keyStr) {
+              keyBalances[keyStr] = item;
+            }
+          });
+          renderKeysList();
+          showToast('所有 Key 余额刷新成功');
+        } else {
+          showToast('刷新余额失败: ' + (data.error || '未知错误'), 'error');
+        }
+      } catch (err) {
+        showToast('刷新余额出错: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+      }
+    }
+
     function renderKeysList() {
       const container = document.getElementById('keyListContainer');
       const countBadge = document.getElementById('keyCountBadge');
@@ -698,9 +759,14 @@
         keyItem.className = `key-item ${isActive ? 'active' : ''}`;
         
         keyItem.innerHTML = `
-          <div class="key-info">
-            <div class="key-index">${index + 1}</div>
-            <div class="key-string">${escapeHtml(key)}</div>
+          <div class="key-info" style="display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 70%; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+              <div class="key-index">${index + 1}</div>
+              <div class="key-string" style="font-family: monospace; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1;">${escapeHtml(key)}</div>
+            </div>
+            <div class="key-balance-info" style="margin-left: 40px; font-size: 13px; color: var(--text-muted);">
+              ${renderKeyBalance(key)}
+            </div>
           </div>
           <div class="key-actions">
             ${isActive 
