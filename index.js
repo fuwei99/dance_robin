@@ -346,7 +346,10 @@ async function handleProxyRequest(req, res, requestId) {
       headers['content-length'] = bodyBuffer.length.toString();
     }
     
-    const targetUrl = `${TARGET_HOST}${req.url}`;
+    let targetUrl = `${TARGET_HOST}${req.url}`;
+    if (TARGET_HOST.endsWith('/gateway') && req.url.startsWith('/gateway')) {
+      targetUrl = `${TARGET_HOST.slice(0, -8)}${req.url}`;
+    }
     const dispatcher = getProxyDispatcher(proxyUrl);
     
     try {
